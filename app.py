@@ -11,18 +11,49 @@ from sklearn.model_selection import train_test_split
 DATA_PATH = 'data/winequality-red.csv'
 MODEL_PATH = 'model_pickle_2'
 
-# Load data and model
-dataset = pd.read_csv(DATA_PATH)
-with open(MODEL_PATH, 'rb') as f:
-    model_2 = pickle.load(f)
+# Helper function to convert all columns to numeric dtype (coerce errors)
+def convert_all_to_numeric(df):
+    df = df.copy()
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    return df
 
-# Prepare target
+# Force all columns to standard NumPy dtypes (float64 or int64) for pyarrow compatibility
+def force_numpy_dtypes(df):
+    df = df.copy()
+    for col in df.columns:
+        if pd.api.types.is_float_dtype(df[col].dtype):
+            df[col] = df[col].astype('float64')
+        elif pd.api.types.is_integer_dtype(df[col].dtype):
+            df[col] = df[col].astype('int64')
+        else:
+            # Convert anything else to string to avoid issues
+            df[col] = df[col].astype(str)
+    return df
+
+# Load data
+dataset = pd.read_csv(DATA_PATH)
+
+# Convert all columns to numeric (coerce errors)
+dataset = convert_all_to_numeric(dataset)
+
+# Prepare target column
 dataset['target'] = (dataset['quality'] >= 6).astype(int)
+
+# Fill NaNs with 0 and cast target and quality to int64
+dataset['target'] = dataset['target'].fillna(0).astype('int64')
+dataset['quality'] = dataset['quality'].fillna(0).astype('int64')
+
 X = dataset.drop(['quality', 'target'], axis=1)
 y = dataset['target']
+
 train_data, test_data, train_target, test_target = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
+
+# Load model
+with open(MODEL_PATH, 'rb') as f:
+    model_2 = pickle.load(f)
 
 # Prediction helper
 def wine_prediction(input_data):
@@ -94,33 +125,35 @@ elif menu == "Data Exploration":
     st.header("Dataset Overview")
     st.write(f"Shape of dataset: {dataset.shape}")
     st.write(f"Columns: {list(dataset.columns)}")
-    st.write(dataset.dtypes)
+
+    # Force numpy dtypes before displaying to avoid pyarrow error
+    st.write(force_numpy_dtypes(dataset.dtypes.to_frame(name='dtype')))
 
     st.subheader("Sample Data")
-    st.dataframe(dataset.head())
+    st.dataframe(force_numpy_dtypes(dataset.head()))
 
     st.subheader("Filter Data")
     quality_filter = st.slider("Select Quality", int(dataset['quality'].min()), int(dataset['quality'].max()), (3,8))
     filtered_df = dataset[(dataset['quality'] >= quality_filter[0]) & (dataset['quality'] <= quality_filter[1])]
     st.write(f"Filtered Data Shape: {filtered_df.shape}")
-    st.dataframe(filtered_df)
+    st.dataframe(force_numpy_dtypes(filtered_df))
 
 elif menu == "Visualisation":
     st.header("Data Visualisations")
 
     st.subheader("Wine Quality Distribution")
     fig, ax = plt.subplots()
-    sns.countplot(data=dataset, x='quality', palette='viridis', ax=ax)
+    sns.countplot(data=dataset, x='quality', hue='quality', palette='viridis', legend=False, ax=ax)
     st.pyplot(fig)
 
     st.subheader("Alcohol vs Quality")
     fig, ax = plt.subplots()
-    sns.boxplot(data=dataset, x='quality', y='alcohol', palette='coolwarm', ax=ax)
+    sns.boxplot(data=dataset, x='quality', y='alcohol', hue='quality', palette='coolwarm', legend=False, ax=ax)
     st.pyplot(fig)
 
     st.subheader("Correlation Heatmap")
     fig, ax = plt.subplots(figsize=(10,6))
-    corr = dataset.corr()
+    corr = force_numpy_dtypes(dataset).corr()
     sns.heatmap(corr, annot=False, cmap='Blues', ax=ax)
     st.pyplot(fig)
 
