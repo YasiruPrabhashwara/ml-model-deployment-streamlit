@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 
 # Paths
 DATA_PATH = 'data/winequality-red.csv'
-MODEL_PATH = 'model_pickle_2'
+MODEL_PATH = 'model_pickle_2.pkl'
 
 # Helper function to convert all columns to numeric dtype (coerce errors)
 def convert_all_to_numeric(df):
